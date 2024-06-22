@@ -118,9 +118,9 @@ final class SymfonyMessengerIntegration extends Integration
     private function setSpanAttributes(
         SpanData $span,
         string $name,
-        string $operation = null,
-        Envelope $envelope = null,
-        \Throwable $throwable = null
+        $operation = null,
+        $envelope = null,
+        $throwable = null
     ) {
         $span->name = $name;
         $span->service = \ddtrace_config_app_name('symfony');
@@ -128,11 +128,11 @@ final class SymfonyMessengerIntegration extends Integration
         $span->meta[Tag::SPAN_KIND] = 'client';
         $span->meta[Tag::COMPONENT] = self::NAME;
 
-        if ($operation !== null && $operation !== '') {
+        if (\is_string($operation) && $operation !== '') {
             $span->meta[Tag::MQ_OPERATION] = $operation;
         }
 
-        if ($envelope !== null) {
+        if ($envelope instanceof Envelope) {
             $messageName = \get_class($envelope->getMessage());
             $receivedStamp = $envelope->last(ReceivedStamp::class);
             $transportName = $receivedStamp ? $receivedStamp->getTransportName() : null;
@@ -144,7 +144,7 @@ final class SymfonyMessengerIntegration extends Integration
             $span->meta = \array_merge($span->meta, $this->resolveMetadataFromEnvelope($envelope));
         }
 
-        if ($throwable !== null) {
+        if ($throwable instanceof \Throwable) {
             $span->exception = $throwable;
         }
     }
