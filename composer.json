@@ -7,7 +7,10 @@
   "autoload": {
     "psr-4": {
       "NatePage\\DDTrace\\": "src/"
-    }
+    },
+    "files": [
+      "files/symfony-messenger-integration.php"
+    ]
   },
   "require-dev": {
     "datadog/dd-trace": "^1.1",
