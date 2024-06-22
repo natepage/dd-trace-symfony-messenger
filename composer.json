@@ -12,6 +12,6 @@
   "require-dev": {
     "datadog/dd-trace": "^1.1",
     "symfony/messenger": "^5.0 || ^6.0",
-    "symfony/amazon-sqs-messenger": "^7.1"
+    "symfony/amazon-sqs-messenger": "^5.0 || ^6.0"
   }
 }
