@@ -1,0 +1,17 @@
+{
+  "name": "natepage/dd-trace-symfony-messenger",
+  "description": "POC DDTrace instrumentation for Symfony Messenger",
+  "require": {
+    "php": "^7.0 || ^8.0.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "NatePage\\DDTrace\\": "src/"
+    }
+  },
+  "require-dev": {
+    "datadog/dd-trace": "^1.1",
+    "symfony/messenger": "^5.0 || ^6.0",
+    "symfony/amazon-sqs-messenger": "^7.1"
+  }
+}
