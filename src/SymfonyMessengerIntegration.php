@@ -163,7 +163,8 @@ final class SymfonyMessengerIntegration extends Integration
 
         // AWS SQS
         if (\class_exists(AmazonSqsReceivedStamp::class)) {
-            $transportMessageId = $envelope->last(AmazonSqsReceivedStamp::class)?->getId();
+            $amazonSqsReceivedStamp = $envelope->last(AmazonSqsReceivedStamp::class);
+            $transportMessageId = $amazonSqsReceivedStamp ? $amazonSqsReceivedStamp->getId() : null;
         }
 
         $stamps = [];
