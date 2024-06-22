@@ -53,64 +53,75 @@ final class SymfonyMessengerIntegration extends Integration
         trace_method(
             'Symfony\Component\Messenger\Worker',
             'handleMessage',
-            [
-                'prehook' => function (SpanData $span, array $args) use ($integration, &$newTrace) {
-                    /** @var \Symfony\Component\Messenger\Envelope $envelope */
-                    $envelope = $args[0];
+            function (SpanData $span, array $args, $returnValue, \Throwable $exception = null) use ($integration) {
+                /** @var \Symfony\Component\Messenger\Envelope $envelope */
+                $envelope = $args[0];
 
-                    $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope);
-
-                    $ddTraceStamp = $envelope->last(DDTraceStamp::class);
-                    if ($ddTraceStamp instanceof DDTraceStamp) {
-                        if (\dd_trace_env_config('DD_TRACE_LARAVEL_QUEUE_DISTRIBUTED_TRACING')) {
-                            $newTrace = start_trace_span();
-                            $integration->setSpanAttributes($newTrace, 'symfony.messenger.handle_message', 'receive', $envelope);
-
-                            consume_distributed_tracing_headers($ddTraceStamp->getHeaders());
-
-                            $span->links[] = $newTrace->getLink();
-                            $newTrace->links[] = $span->getLink();
-                        } else {
-                            $span->links[] = SpanLink::fromHeaders($ddTraceStamp->getHeaders());
-                        }
-                    }
-                },
-                'posthook' => function (SpanData $span, array $args, $returnValue, \Throwable $exception = null) use ($integration, &$newTrace) {
-                    /** @var \Symfony\Component\Messenger\Envelope $envelope */
-                    $envelope = $args[0];
-
-                    if ($exception !== null) {
-                        // Used by Logs Correlation to track the origin of an exception
-                        ObjectKVStore::put(
-                            $exception,
-                            'exception_trace_identifiers',
-                            [
-                                'trace_id' => logs_correlation_trace_id(),
-                                'span_id' => \dd_trace_peek_span_id()
-                            ]
-                        );
-                    }
-
-                    $activeSpan = active_span();
-                    if (dd_trace_env_config('DD_TRACE_LARAVEL_QUEUE_DISTRIBUTED_TRACING')
-                        && $activeSpan !== $span
-                        && $activeSpan === $newTrace) {
-                        $integration->setSpanAttributes($activeSpan, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
-                        close_span();
-
-                        if (
-                            dd_trace_env_config("DD_TRACE_REMOVE_ROOT_SPAN_LARAVEL_QUEUE")
-                            && dd_trace_env_config("DD_TRACE_REMOVE_AUTOINSTRUMENTATION_ORPHANS")
-                        ) {
-                            set_distributed_tracing_context("0", "0");
-                        }
-                    }
-
-                    $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
-                },
-                'recurse' => false,
-            ]
+                $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
+            }
         );
+
+        //trace_method(
+        //    'Symfony\Component\Messenger\Worker',
+        //    'handleMessage',
+        //    [
+        //        'prehook' => function (SpanData $span, array $args) use ($integration, &$newTrace) {
+        //            /** @var \Symfony\Component\Messenger\Envelope $envelope */
+        //            $envelope = $args[0];
+        //
+        //            $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope);
+        //
+        //            $ddTraceStamp = $envelope->last(DDTraceStamp::class);
+        //            if ($ddTraceStamp instanceof DDTraceStamp) {
+        //                if (\dd_trace_env_config('DD_TRACE_LARAVEL_QUEUE_DISTRIBUTED_TRACING')) {
+        //                    $newTrace = start_trace_span();
+        //                    $integration->setSpanAttributes($newTrace, 'symfony.messenger.handle_message', 'receive', $envelope);
+        //
+        //                    consume_distributed_tracing_headers($ddTraceStamp->getHeaders());
+        //
+        //                    $span->links[] = $newTrace->getLink();
+        //                    $newTrace->links[] = $span->getLink();
+        //                } else {
+        //                    $span->links[] = SpanLink::fromHeaders($ddTraceStamp->getHeaders());
+        //                }
+        //            }
+        //        },
+        //        'posthook' => function (SpanData $span, array $args, $returnValue, \Throwable $exception = null) use ($integration, &$newTrace) {
+        //            /** @var \Symfony\Component\Messenger\Envelope $envelope */
+        //            $envelope = $args[0];
+        //
+        //            if ($exception !== null) {
+        //                // Used by Logs Correlation to track the origin of an exception
+        //                ObjectKVStore::put(
+        //                    $exception,
+        //                    'exception_trace_identifiers',
+        //                    [
+        //                        'trace_id' => logs_correlation_trace_id(),
+        //                        'span_id' => \dd_trace_peek_span_id()
+        //                    ]
+        //                );
+        //            }
+        //
+        //            $activeSpan = active_span();
+        //            if (dd_trace_env_config('DD_TRACE_LARAVEL_QUEUE_DISTRIBUTED_TRACING')
+        //                && $activeSpan !== $span
+        //                && $activeSpan === $newTrace) {
+        //                $integration->setSpanAttributes($activeSpan, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
+        //                close_span();
+        //
+        //                if (
+        //                    dd_trace_env_config("DD_TRACE_REMOVE_ROOT_SPAN_LARAVEL_QUEUE")
+        //                    && dd_trace_env_config("DD_TRACE_REMOVE_AUTOINSTRUMENTATION_ORPHANS")
+        //                ) {
+        //                    set_distributed_tracing_context("0", "0");
+        //                }
+        //            }
+        //
+        //            $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
+        //        },
+        //        'recurse' => false,
+        //    ]
+        //);
 
         return self::LOADED;
     }
