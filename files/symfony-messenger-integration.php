@@ -97,7 +97,7 @@ function setSpanAttributes(
             ? \sprintf('%s -> %s', $messageName, $transportName)
             : $messageName;
 
-        $span->meta = \array_merge($span->meta, $this->resolveMetadataFromEnvelope($envelope));
+        $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
     }
 
     if ($throwable instanceof \Throwable) {
