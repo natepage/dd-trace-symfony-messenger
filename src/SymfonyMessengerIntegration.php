@@ -108,7 +108,7 @@ final class SymfonyMessengerIntegration extends Integration
 
                     $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
                 },
-                'recurse' => true,
+                'recurse' => false,
             ]
         );
 
