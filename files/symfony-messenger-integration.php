@@ -50,13 +50,19 @@ function setSpanAttributes(
     }
 
     if ($envelope instanceof Envelope) {
-        $messageName = \get_class($envelope->getMessage());
         $receivedStamp = $envelope->last(ReceivedStamp::class);
+        $handledStamp = $envelope->last(HandledStamp::class);
+
+        $messageName = \get_class($envelope->getMessage());
         $transportName = $receivedStamp ? $receivedStamp->getTransportName() : $transportName;
 
         $span->resource = $transportName !== null && $transportName !== ''
             ? \sprintf('%s -> %s', $messageName, $transportName)
             : $messageName;
+
+        if ($handledStamp) {
+            $span->resource = $handledStamp->getHandlerName();
+        }
 
         $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
     }
@@ -147,7 +153,7 @@ trace_method(
 
             setSpanAttributes(
                 $span,
-                'symfony.messenger.handle_message',
+                'symfony.messenger.receive_message',
                 $transportName,
                 'receive',
                 $envelope
@@ -159,7 +165,7 @@ trace_method(
                     $newTrace = start_trace_span();
                     setSpanAttributes(
                         $newTrace,
-                        'symfony.messenger.handle_message',
+                        'symfony.messenger.receive_message',
                         $transportName,
                         'receive',
                         $envelope
@@ -198,7 +204,7 @@ trace_method(
                 && $activeSpan === $newTrace) {
                 setSpanAttributes(
                     $activeSpan,
-                    'symfony.messenger.handle_message',
+                    'symfony.messenger.receive_message',
                     $transportName,
                     'receive',
                     $envelope,
@@ -217,7 +223,7 @@ trace_method(
 
             setSpanAttributes(
                 $span,
-                'symfony.messenger.handle_message',
+                'symfony.messenger.receive_message',
                 $transportName,
                 'receive',
                 $envelope,
@@ -238,8 +244,24 @@ trace_method(
             $span,
             'symfony.messenger.handle_message',
             null,
-            'receive',
+            'handle',
             $envelope,
+            $exception
+        );
+    }
+);
+
+// Since Symfony 6.2
+trace_method(
+    'Symfony\Component\Messenger\Middleware\HandleMessageMiddleware',
+    'handle',
+    function (SpanData $span, array $args, $returnValue, $exception = null) {
+        setSpanAttributes(
+            $span,
+            'symfony.messenger.handle_message',
+            null,
+            'handle',
+            null,
             $exception
         );
     }
