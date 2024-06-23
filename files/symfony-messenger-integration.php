@@ -11,9 +11,11 @@ use Symfony\Component\Messenger\Bridge\AmazonSqs\Transport\AmazonSqsReceivedStam
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Stamp\BusNameStamp;
 use Symfony\Component\Messenger\Stamp\DelayStamp;
+use Symfony\Component\Messenger\Stamp\HandledStamp;
 use Symfony\Component\Messenger\Stamp\ReceivedStamp;
 use Symfony\Component\Messenger\Stamp\RedeliveryStamp;
 use Symfony\Component\Messenger\Stamp\TransportMessageIdStamp;
+
 use function DDTrace\active_span;
 use function DDTrace\close_span;
 use function DDTrace\consume_distributed_tracing_headers;
@@ -68,6 +70,7 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
 {
     $busStamp = $envelope->last(BusNameStamp::class);
     $delayStamp = $envelope->last(DelayStamp::class);
+    $handledStamp = $envelope->last(HandledStamp::class);
     $receivedStamp = $envelope->last(ReceivedStamp::class);
     $redeliveryStamp = $envelope->last(RedeliveryStamp::class);
     $transportMessageIdStamp = $envelope->last(TransportMessageIdStamp::class);
@@ -91,6 +94,7 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
         'messaging.symfony.bus' => $busStamp ? $busStamp->getBusName() : null,
         'messaging.symfony.name' => $messageName,
         'messaging.symfony.transport' => $transportName,
+        'messaging.symfony.handler' => $handledStamp ? $handledStamp->getHandlerName() : null,
         'messaging.symfony.delay' => $delayStamp ? $delayStamp->getDelay() : null,
         'messaging.symfony.retry_count' => $redeliveryStamp ? $redeliveryStamp->getRetryCount() : null,
         'messaging.symfony.redelivered_at' => $redeliveryStamp ? $redeliveryStamp->getRedeliveredAt()->format('Y-m-d\TH:i:sP') : null,
@@ -170,7 +174,7 @@ trace_method(
                 }
             }
         },
-        'posthook' => function (SpanData $span, array $args, $returnValue, \Throwable $exception = null) use ($integration, &$newTrace) {
+        'posthook' => function (SpanData $span, array $args, $returnValue, $exception = null) use (&$newTrace) {
             /** @var \Symfony\Component\Messenger\Envelope $envelope */
             $envelope = $args[0];
             /** @var string $transportName */
@@ -222,4 +226,21 @@ trace_method(
         },
         'recurse' => false,
     ]
+);
+
+trace_method(
+    'Symfony\Component\Messenger\Middleware\HandleMessageMiddleware',
+    'handle',
+    function (SpanData $span, array $args, $returnValue, $exception = null) {
+        $envelope = $returnValue instanceof Envelope ? $returnValue : null;
+
+        setSpanAttributes(
+            $span,
+            'symfony.messenger.handle_message',
+            null,
+            'receive',
+            $envelope,
+            $exception
+        );
+    }
 );
