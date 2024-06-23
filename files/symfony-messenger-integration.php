@@ -235,10 +235,11 @@ trace_method(
 );
 
 trace_method(
-    'Symfony\Component\Messenger\Middleware\HandleMessageMiddleware',
+    'Symfony\Component\Messenger\Middleware\MiddlewareInterface',
     'handle',
     function (SpanData $span, array $args, $returnValue, $exception = null) {
-        $envelope = $returnValue instanceof Envelope ? $returnValue : null;
+        /** @var \Symfony\Component\Messenger\Envelope $envelope */
+        $envelope = $args[0];
 
         setSpanAttributes(
             $span,
