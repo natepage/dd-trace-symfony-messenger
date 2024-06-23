@@ -42,23 +42,17 @@ final class SymfonyMessengerIntegration
                 $envelope = $hook->args[0];
 
                 if (\ddtrace_config_distributed_tracing_enabled()) {
-                    $hook->overrideArguments([
-                        $envelope->with(new DDTraceStamp(generate_distributed_tracing_headers()))
-                    ]);
+                    $ddTraceStamp = $envelope->last(DDTraceStamp::class);
+
+                    // Add distributed tracing stamp only if not already on the envelope
+                    if ($ddTraceStamp === null) {
+                        $hook->overrideArguments([
+                            $envelope->with(new DDTraceStamp(generate_distributed_tracing_headers()))
+                        ]);
+                    }
                 }
             }
         );
-
-        //trace_method(
-        //    'Symfony\Component\Messenger\Worker',
-        //    'handleMessage',
-        //    function (SpanData $span, array $args, $returnValue, \Throwable $exception = null) use ($integration) {
-        //        /** @var \Symfony\Component\Messenger\Envelope $envelope */
-        //        $envelope = $args[0];
-        //
-        //        $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
-        //    }
-        //);
 
         trace_method(
             'Symfony\Component\Messenger\Worker',
@@ -67,8 +61,16 @@ final class SymfonyMessengerIntegration
                 'prehook' => function (SpanData $span, array $args) use ($integration, &$newTrace) {
                     /** @var \Symfony\Component\Messenger\Envelope $envelope */
                     $envelope = $args[0];
+                    /** @var string $transportName */
+                    $transportName = $args[1];
 
-                    $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope);
+                    $integration->setSpanAttributes(
+                        $span,
+                        'symfony.messenger.handle_message',
+                        $transportName,
+                        'receive',
+                        $envelope
+                    );
 
                     $ddTraceStamp = $envelope->last(DDTraceStamp::class);
                     if ($ddTraceStamp instanceof DDTraceStamp) {
@@ -88,6 +90,8 @@ final class SymfonyMessengerIntegration
                 'posthook' => function (SpanData $span, array $args, $returnValue, \Throwable $exception = null) use ($integration, &$newTrace) {
                     /** @var \Symfony\Component\Messenger\Envelope $envelope */
                     $envelope = $args[0];
+                    /** @var string $transportName */
+                    $transportName = $args[1];
 
                     if ($exception !== null) {
                         // Used by Logs Correlation to track the origin of an exception
@@ -105,7 +109,15 @@ final class SymfonyMessengerIntegration
                     if (dd_trace_env_config('DD_TRACE_LARAVEL_QUEUE_DISTRIBUTED_TRACING')
                         && $activeSpan !== $span
                         && $activeSpan === $newTrace) {
-                        $integration->setSpanAttributes($activeSpan, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
+                        $integration->setSpanAttributes(
+                            $activeSpan,
+                            'symfony.messenger.handle_message',
+                            $transportName,
+                            'receive',
+                            $envelope,
+                            $exception
+                        );
+
                         close_span();
 
                         if (
@@ -116,7 +128,14 @@ final class SymfonyMessengerIntegration
                         }
                     }
 
-                    $integration->setSpanAttributes($span, 'symfony.messenger.handle_message', 'receive', $envelope, $exception);
+                    $integration->setSpanAttributes(
+                        $span,
+                        'symfony.messenger.handle_message',
+                        $transportName,
+                        'receive',
+                        $envelope,
+                        $exception
+                    );
                 },
                 'recurse' => false,
             ]
@@ -128,6 +147,7 @@ final class SymfonyMessengerIntegration
     private function setSpanAttributes(
         SpanData $span,
         string $name,
+        $transportName = null,
         $operation = null,
         $envelope = null,
         $throwable = null
@@ -145,7 +165,7 @@ final class SymfonyMessengerIntegration
         if ($envelope instanceof Envelope) {
             $messageName = \get_class($envelope->getMessage());
             $receivedStamp = $envelope->last(ReceivedStamp::class);
-            $transportName = $receivedStamp ? $receivedStamp->getTransportName() : null;
+            $transportName = $receivedStamp ? $receivedStamp->getTransportName() : $transportName;
 
             $span->resource = $transportName !== null && $transportName !== ''
                 ? \sprintf('%s -> %s', $messageName, $transportName)
