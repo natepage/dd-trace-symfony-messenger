@@ -15,6 +15,7 @@ use Symfony\Component\Messenger\Stamp\DelayStamp;
 use Symfony\Component\Messenger\Stamp\HandledStamp;
 use Symfony\Component\Messenger\Stamp\ReceivedStamp;
 use Symfony\Component\Messenger\Stamp\RedeliveryStamp;
+use Symfony\Component\Messenger\Stamp\SentStamp;
 use Symfony\Component\Messenger\Stamp\TransportMessageIdStamp;
 
 use function DDTrace\active_span;
@@ -93,6 +94,7 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
     $handledStamp = $envelope->last(HandledStamp::class);
     $receivedStamp = $envelope->last(ReceivedStamp::class);
     $redeliveryStamp = $envelope->last(RedeliveryStamp::class);
+    $sentStamp = $envelope->last(SentStamp::class);
     $transportMessageIdStamp = $envelope->last(TransportMessageIdStamp::class);
 
     $messageName = \get_class($envelope->getMessage());
@@ -118,6 +120,8 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
         'messaging.symfony.delay' => $delayStamp ? $delayStamp->getDelay() : null,
         'messaging.symfony.retry_count' => $redeliveryStamp ? $redeliveryStamp->getRetryCount() : null,
         'messaging.symfony.redelivered_at' => $redeliveryStamp ? $redeliveryStamp->getRedeliveredAt()->format('Y-m-d\TH:i:sP') : null,
+        'messaging.symfony.sender_alias' => $sentStamp ? $sentStamp->getSenderAlias() : null,
+        'messaging.symfony.sender_class' => $sentStamp ? $sentStamp->getSenderClass() : null,
         'messaging.symfony.stamps' => $stamps,
         Tag::MQ_DESTINATION => $transportName,
         Tag::MQ_SYSTEM => 'symfony',
@@ -138,6 +142,19 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
 trace_method(
     'Symfony\Component\Messenger\MessageBusInterface',
     'dispatch',
+    function (SpanData $span, array $args, $returnValue, $exception = null) {
+        setSpanAttributes(
+            $span,
+            null,
+            $args[0],
+            $exception
+        );
+    }
+);
+
+trace_method(
+    'Symfony\Component\Messenger\Transport\Sender\SenderInterface',
+    'send',
     function (SpanData $span, array $args, $returnValue, $exception = null) {
         setSpanAttributes(
             $span,
