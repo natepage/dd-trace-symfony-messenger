@@ -10,6 +10,7 @@ use NatePage\DDTrace\DDTraceStamp;
 use Symfony\Component\Messenger\Bridge\AmazonSqs\Transport\AmazonSqsReceivedStamp;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Stamp\BusNameStamp;
+use Symfony\Component\Messenger\Stamp\ConsumedByWorkerStamp;
 use Symfony\Component\Messenger\Stamp\DelayStamp;
 use Symfony\Component\Messenger\Stamp\HandledStamp;
 use Symfony\Component\Messenger\Stamp\ReceivedStamp;
@@ -65,6 +66,11 @@ function setSpanAttributes(
         }
 
         $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
+    } elseif (\is_object($envelope)) {
+        $messageName = \get_class($envelope);
+        $span->resource = $transportName !== null && $transportName !== ''
+            ? \sprintf('%s -> %s', $messageName, $transportName)
+            : $messageName;
     }
 
     if ($throwable instanceof \Throwable) {
@@ -121,6 +127,39 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
 }
 
 /* ---- Tracing Functions ---- */
+trace_method(
+    'Symfony\Component\Messenger\MessageBusInterface',
+    'dispatch',
+    function (SpanData $span, array $args, $returnValue, $exception = null) {
+        $name = 'symfony.messenger.dispatch_message';
+        $operation = 'dispatch';
+        $envelope = $args[0];
+
+        $originalName = $span->name;
+        $originalResource = $span->resource;
+
+        if ($envelope instanceof Envelope) {
+            if ($envelope->last(ConsumedByWorkerStamp::class) !== null
+                || $envelope->last(ReceivedStamp::class) !== null) {
+                $name = 'symfony.messenger.handle_message';
+                $operation = 'receive';
+            }
+        }
+
+        setSpanAttributes(
+            $span,
+            $name,
+            null,
+            $operation,
+            $envelope,
+            $exception
+        );
+
+        $span->name = $originalName;
+        $span->resource = $originalResource;
+    }
+);
+
 // Attach current context to Envelope before sender sends it to remote queue
 install_hook(
     'Symfony\Component\Messenger\Transport\Sender\SenderInterface::send',
