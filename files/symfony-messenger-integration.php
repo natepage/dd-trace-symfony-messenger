@@ -144,14 +144,17 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
 trace_method(
     'Symfony\Component\Messenger\MessageBusInterface',
     'dispatch',
-    function (SpanData $span, array $args, $returnValue, $exception = null) {
-        setSpanAttributes(
-            $span,
-            null,
-            $args[0],
-            $exception
-        );
-    }
+    [
+        'posthook' => function (SpanData $span, array $args, $returnValue, $exception = null) {
+            setSpanAttributes(
+                $span,
+                null,
+                $args[0],
+                $exception
+            );
+        },
+        'recurse' => true,
+    ]
 );
 
 trace_method(
@@ -283,12 +286,15 @@ trace_method(
 trace_method(
     'Symfony\Component\Messenger\Middleware\MiddlewareInterface',
     'handle',
-    function (SpanData $span, array $args, $returnValue, $exception = null) {
-        setSpanAttributes(
-            $span,
-            null,
-            $args[0],
-            $exception
-        );
-    }
+    [
+        'posthook' => function (SpanData $span, array $args, $returnValue, $exception = null) {
+            setSpanAttributes(
+                $span,
+                null,
+                $args[0],
+                $exception
+            );
+        },
+        'recurse' => true,
+    ]
 );
