@@ -37,10 +37,11 @@ function setSpanAttributes(
     $transportName = null,
     $envelope = null,
     $throwable = null,
-    $useMessageAsResource = null
+    $useMessageAsResource = null,
+    $operation = null
 ) {
     // Set defaults
-    $operation = 'dispatch';
+    $operation = $operation ?? 'dispatch';
     $messageName = \is_object($envelope) ? \get_class($envelope) : null;
     $resource = null;
 
@@ -61,6 +62,10 @@ function setSpanAttributes(
         }
 
         $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
+    }
+
+    if ($span->name === null) {
+        $span->name = \sprintf('symfony_messenger.%s', $operation);
     }
 
     $span->resource = $resource;
@@ -178,7 +183,8 @@ trace_method(
                 $transportName,
                 $envelope,
                 null,
-                true
+                true,
+                'receive' // Override operation to receive as envelope doesn't have right stamps yet
             );
 
             $ddTraceStamp = $envelope->last(DDTraceStamp::class);
@@ -270,7 +276,7 @@ trace_method(
 // Since Symfony 6.2
 trace_method(
     'Symfony\Component\Messenger\Middleware\HandleMessageMiddleware',
-    'handle',
+    'callHandler',
     function (SpanData $span, array $args, $returnValue, $exception = null) {
         setSpanAttributes(
             $span,
