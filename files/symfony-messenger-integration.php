@@ -36,38 +36,43 @@ function setSpanAttributes(
     SpanData $span,
     string $name,
     $transportName = null,
-    $operation = null,
     $envelope = null,
-    $throwable = null
+    $throwable = null,
+    $useMessageAsResource = null
 ) {
-    $span->name = $name;
-    $span->service = \ddtrace_config_app_name('symfony');
-    $span->type = 'queue';
-    $span->meta[Tag::SPAN_KIND] = 'client';
-    $span->meta[Tag::COMPONENT] = 'symfonymessenger';
-
-    if (\is_string($operation) && $operation !== '') {
-        $span->meta[Tag::MQ_OPERATION] = $operation;
-    }
+    // Set defaults
+    $operation = 'dispatch';
+    $messageName = \is_object($envelope) ? \get_class($envelope) : null;
+    $resource = null;
 
     if ($envelope instanceof Envelope) {
+        $consumedByWorkerStamp = $envelope->last(ConsumedByWorkerStamp::class);
         $receivedStamp = $envelope->last(ReceivedStamp::class);
         $handledStamp = $envelope->last(HandledStamp::class);
 
         $messageName = \get_class($envelope->getMessage());
         $transportName = $receivedStamp ? $receivedStamp->getTransportName() : $transportName;
 
-        $span->resource = $transportName !== null && $transportName !== ''
-            ? \sprintf('%s -> %s', $messageName, $transportName)
-            : $messageName;
+        if ($consumedByWorkerStamp || $receivedStamp) {
+            $operation = 'receive';
+        }
 
         if ($handledStamp) {
-            $span->resource = $handledStamp->getHandlerName();
+            $resource = $handledStamp->getHandlerName();
         }
 
         $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
-    } elseif (\is_object($envelope)) {
-        $messageName = \get_class($envelope);
+    }
+
+    $span->name = $name;
+    $span->resource = $resource;
+    $span->service = \ddtrace_config_app_name('symfony');
+    $span->type = 'queue';
+    $span->meta[Tag::SPAN_KIND] = 'client';
+    $span->meta[Tag::COMPONENT] = 'symfonymessenger';
+    $span->meta[Tag::MQ_OPERATION] = $operation;
+
+    if (($useMessageAsResource ?? false) && $resource === null) {
         $span->resource = $transportName !== null && $transportName !== ''
             ? \sprintf('%s -> %s', $messageName, $transportName)
             : $messageName;
@@ -131,32 +136,13 @@ trace_method(
     'Symfony\Component\Messenger\MessageBusInterface',
     'dispatch',
     function (SpanData $span, array $args, $returnValue, $exception = null) {
-        $name = 'symfony.messenger.dispatch_message';
-        $operation = 'dispatch';
-        $envelope = $args[0];
-
-        $originalName = $span->name;
-        $originalResource = $span->resource;
-
-        if ($envelope instanceof Envelope) {
-            if ($envelope->last(ConsumedByWorkerStamp::class) !== null
-                || $envelope->last(ReceivedStamp::class) !== null) {
-                $name = 'symfony.messenger.handle_message';
-                $operation = 'receive';
-            }
-        }
-
         setSpanAttributes(
             $span,
-            $name,
+            'symfony.messenger.dispatch_message',
             null,
-            $operation,
-            $envelope,
+            $args[0],
             $exception
         );
-
-        $span->name = $originalName;
-        $span->resource = $originalResource;
     }
 );
 
@@ -194,8 +180,9 @@ trace_method(
                 $span,
                 'symfony.messenger.receive_message',
                 $transportName,
-                'receive',
-                $envelope
+                $envelope,
+                null,
+                true
             );
 
             $ddTraceStamp = $envelope->last(DDTraceStamp::class);
@@ -206,8 +193,9 @@ trace_method(
                         $newTrace,
                         'symfony.messenger.receive_message',
                         $transportName,
-                        'receive',
-                        $envelope
+                        $envelope,
+                        null,
+                        true
                     );
 
                     consume_distributed_tracing_headers($ddTraceStamp->getHeaders());
@@ -245,9 +233,9 @@ trace_method(
                     $activeSpan,
                     'symfony.messenger.receive_message',
                     $transportName,
-                    'receive',
                     $envelope,
-                    $exception
+                    $exception,
+                    true
                 );
 
                 close_span();
@@ -264,12 +252,12 @@ trace_method(
                 $span,
                 'symfony.messenger.receive_message',
                 $transportName,
-                'receive',
                 $envelope,
-                $exception
+                $exception,
+                true
             );
         },
-        'recurse' => false,
+        'recurse' => true,
     ]
 );
 
@@ -277,15 +265,11 @@ trace_method(
     'Symfony\Component\Messenger\Middleware\MiddlewareInterface',
     'handle',
     function (SpanData $span, array $args, $returnValue, $exception = null) {
-        /** @var \Symfony\Component\Messenger\Envelope $envelope */
-        $envelope = $args[0];
-
         setSpanAttributes(
             $span,
             'symfony.messenger.handle_message',
             null,
-            'handle',
-            $envelope,
+            $args[0],
             $exception
         );
     }
@@ -300,7 +284,6 @@ trace_method(
             $span,
             'symfony.messenger.handle_message',
             null,
-            'handle',
             null,
             $exception
         );
