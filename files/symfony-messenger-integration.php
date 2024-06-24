@@ -189,7 +189,7 @@ trace_method(
 
             $ddTraceStamp = $envelope->last(DDTraceStamp::class);
             if ($ddTraceStamp instanceof DDTraceStamp) {
-                if (\dd_trace_env_config('DD_TRACE_LARAVEL_QUEUE_DISTRIBUTED_TRACING')) {
+                if (\dd_trace_env_config('DD_TRACE_SYMFONY_MESSENGER_DISTRIBUTED_TRACING')) {
                     $newTrace = start_trace_span();
                     setSpanAttributes(
                         $newTrace,
@@ -227,7 +227,7 @@ trace_method(
             }
 
             $activeSpan = active_span();
-            if (dd_trace_env_config('DD_TRACE_LARAVEL_QUEUE_DISTRIBUTED_TRACING')
+            if (dd_trace_env_config('DD_TRACE_SYMFONY_MESSENGER_DISTRIBUTED_TRACING')
                 && $activeSpan !== $span
                 && $activeSpan === $newTrace) {
                 setSpanAttributes(
@@ -241,7 +241,7 @@ trace_method(
                 close_span();
 
                 if (
-                    dd_trace_env_config("DD_TRACE_REMOVE_ROOT_SPAN_LARAVEL_QUEUE")
+                    dd_trace_env_config("DD_TRACE_REMOVE_ROOT_SPAN_SYMFONY_MESSENGER")
                     && dd_trace_env_config("DD_TRACE_REMOVE_AUTOINSTRUMENTATION_ORPHANS")
                 ) {
                     set_distributed_tracing_context("0", "0");
@@ -272,17 +272,3 @@ trace_method(
         );
     }
 );
-
-// Since Symfony 6.2
-//trace_method(
-//    'Symfony\Component\Messenger\Middleware\HandleMessageMiddleware',
-//    'callHandler',
-//    function (SpanData $span, array $args, $returnValue, $exception = null) {
-//        setSpanAttributes(
-//            $span,
-//            null,
-//            null,
-//            $exception
-//        );
-//    }
-//);
