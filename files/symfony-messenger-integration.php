@@ -48,11 +48,13 @@ function setSpanAttributes(
 
     if ($envelope instanceof Envelope) {
         $consumedByWorkerStamp = $envelope->last(ConsumedByWorkerStamp::class);
-        $receivedStamp = $envelope->last(ReceivedStamp::class);
         $handledStamp = $envelope->last(HandledStamp::class);
+        $receivedStamp = $envelope->last(ReceivedStamp::class);
+        $sentStamp = $envelope->last(SentStamp::class);
 
         $messageName = \get_class($envelope->getMessage());
         $transportName = $receivedStamp ? $receivedStamp->getTransportName() : $transportName;
+        $transportName = $sentStamp ? ($sentStamp->getSenderAlias() ?? $transportName) : $transportName;
 
         if ($consumedByWorkerStamp || $receivedStamp) {
             $operation = 'receive';
@@ -160,7 +162,8 @@ trace_method(
             $span,
             null,
             $args[0],
-            $exception
+            $exception,
+            true
         );
     }
 );
