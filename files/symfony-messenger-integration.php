@@ -64,7 +64,7 @@ function setSpanAttributes(
         $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
     }
 
-    if ($span->name === null) {
+    if ($span->name === null || $span->name === '') {
         $span->name = \sprintf('symfony_messenger.%s', $operation);
     }
 
@@ -274,15 +274,15 @@ trace_method(
 );
 
 // Since Symfony 6.2
-trace_method(
-    'Symfony\Component\Messenger\Middleware\HandleMessageMiddleware',
-    'callHandler',
-    function (SpanData $span, array $args, $returnValue, $exception = null) {
-        setSpanAttributes(
-            $span,
-            null,
-            null,
-            $exception
-        );
-    }
-);
+//trace_method(
+//    'Symfony\Component\Messenger\Middleware\HandleMessageMiddleware',
+//    'callHandler',
+//    function (SpanData $span, array $args, $returnValue, $exception = null) {
+//        setSpanAttributes(
+//            $span,
+//            null,
+//            null,
+//            $exception
+//        );
+//    }
+//);
