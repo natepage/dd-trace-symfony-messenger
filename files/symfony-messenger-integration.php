@@ -34,7 +34,6 @@ if (\extension_loaded('ddtrace') === false) {
 /* ---- Helper Functions ---- */
 function setSpanAttributes(
     SpanData $span,
-    string $name,
     $transportName = null,
     $envelope = null,
     $throwable = null,
@@ -64,7 +63,6 @@ function setSpanAttributes(
         $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
     }
 
-    $span->name = $name;
     $span->resource = $resource;
     $span->service = \ddtrace_config_app_name('symfony');
     $span->type = 'queue';
@@ -138,7 +136,6 @@ trace_method(
     function (SpanData $span, array $args, $returnValue, $exception = null) {
         setSpanAttributes(
             $span,
-            'symfony.messenger.dispatch_message',
             null,
             $args[0],
             $exception
@@ -178,7 +175,6 @@ trace_method(
 
             setSpanAttributes(
                 $span,
-                'symfony.messenger.receive_message',
                 $transportName,
                 $envelope,
                 null,
@@ -191,7 +187,6 @@ trace_method(
                     $newTrace = start_trace_span();
                     setSpanAttributes(
                         $newTrace,
-                        'symfony.messenger.receive_message',
                         $transportName,
                         $envelope,
                         null,
@@ -231,7 +226,6 @@ trace_method(
                 && $activeSpan === $newTrace) {
                 setSpanAttributes(
                     $activeSpan,
-                    'symfony.messenger.receive_message',
                     $transportName,
                     $envelope,
                     $exception,
@@ -250,7 +244,6 @@ trace_method(
 
             setSpanAttributes(
                 $span,
-                'symfony.messenger.receive_message',
                 $transportName,
                 $envelope,
                 $exception,
@@ -267,7 +260,6 @@ trace_method(
     function (SpanData $span, array $args, $returnValue, $exception = null) {
         setSpanAttributes(
             $span,
-            'symfony.messenger.handle_message',
             null,
             $args[0],
             $exception
@@ -282,7 +274,6 @@ trace_method(
     function (SpanData $span, array $args, $returnValue, $exception = null) {
         setSpanAttributes(
             $span,
-            'symfony.messenger.handle_message',
             null,
             null,
             $exception
