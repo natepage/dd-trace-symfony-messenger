@@ -74,6 +74,7 @@ function setSpanAttributes(
     $span->resource = $resource;
     $span->service = \ddtrace_config_app_name('symfony');
     $span->type = 'queue';
+    $span->meta['messaging.symfony.name'] = $messageName; // Set name even for non-envelope messages
     $span->meta[Tag::SPAN_KIND] = 'client';
     $span->meta[Tag::COMPONENT] = 'symfonymessenger';
     $span->meta[Tag::MQ_OPERATION] = $operation;
@@ -149,7 +150,7 @@ trace_method(
             setSpanAttributes(
                 $span,
                 null,
-                $args[0],
+                Envelope::wrap($args[0], $args[1] ?? []), // Wrap into Envelope to simplify metadata collection
                 $exception
             );
         },
