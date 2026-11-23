@@ -1,8 +1,11 @@
 <?php
 declare(strict_types=1);
 
+namespace NatePage\DDTrace\SymfonyMessenger;
+
 use DDTrace\HookData;
 use DDTrace\SpanData;
+use DDTrace\SpanKind;
 use DDTrace\SpanLink;
 use DDTrace\Tag;
 use DDTrace\Util\ObjectKVStore;
@@ -64,7 +67,7 @@ function setSpanAttributes(
             $resource = $handledStamp->getHandlerName();
         }
 
-        $span->meta = \array_merge($span->meta, resolveMetadataFromEnvelope($envelope));
+        setSpanTags($span, resolveMetadataFromEnvelope($envelope));
     }
 
     if ($span->name === null || $span->name === '') {
@@ -72,12 +75,14 @@ function setSpanAttributes(
     }
 
     $span->resource = $resource;
-    $span->service = \ddtrace_config_app_name('symfony');
+    $service = \trim((string)\dd_trace_env_config('DD_SERVICE'));
+    $span->service = $service !== '' ? $service : 'symfony';
     $span->type = 'queue';
-    $span->meta['messaging.symfony.name'] = $messageName; // Set name even for non-envelope messages
-    $span->meta[Tag::SPAN_KIND] = 'client';
-    $span->meta[Tag::COMPONENT] = 'symfonymessenger';
-    $span->meta[Tag::MQ_OPERATION] = $operation;
+    setSpanKindAndComponent($span, 'symfonymessenger', $operation);
+    setSpanTags($span, [
+        'messaging.symfony.name' => $messageName, // Set name even for non-envelope messages
+        Tag::MQ_OPERATION => $operation,
+    ]);
 
     if (($useMessageAsResource ?? false) && $resource === null) {
         $span->resource = $transportName !== null && $transportName !== ''
@@ -107,7 +112,9 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
     // AWS SQS
     if (\class_exists(AmazonSqsReceivedStamp::class)) {
         $amazonSqsReceivedStamp = $envelope->last(AmazonSqsReceivedStamp::class);
-        $transportMessageId = $amazonSqsReceivedStamp ? $amazonSqsReceivedStamp->getId() : null;
+        if ($amazonSqsReceivedStamp) {
+            $transportMessageId = $amazonSqsReceivedStamp->getId();
+        }
     }
 
     $stamps = [];
@@ -139,6 +146,74 @@ function resolveMetadataFromEnvelope(Envelope $envelope): array
 
         return $value !== null && $value !== '';
     });
+}
+
+function setSpanTags(SpanData $span, array $tags)
+{
+    $normalizedTags = normalizeSpanTags($tags);
+
+    // dd-trace-php 2 deprecates $meta in favour of $attributes and turns $meta into an object
+    // that array functions and operators reject
+    if (\property_exists($span, 'attributes')) {
+        $span->attributes = $normalizedTags + $span->attributes;
+
+        return;
+    }
+
+    $span->meta = $normalizedTags + $span->meta;
+}
+
+/**
+ * Flattens nested arrays into dotted keys, as dd-trace-php 1 serializes $meta, so that dd-trace-php 2, which keeps
+ * nested arrays in $attributes, sends the same tags. Scalars keep their type, stringable objects are cast to strings
+ * and other objects are skipped.
+ */
+function normalizeSpanTags(array $tags, string $keyPrefix = ''): array
+{
+    $normalizedTags = [];
+
+    foreach ($tags as $key => $value) {
+        if ($value === null) {
+            continue;
+        }
+
+        if (\is_array($value)) {
+            $normalizedTags = normalizeSpanTags($value, $keyPrefix . $key . '.') + $normalizedTags;
+
+            continue;
+        }
+
+        if (\is_object($value)) {
+            if (!\method_exists($value, '__toString')) {
+                continue;
+            }
+
+            $value = (string)$value;
+        }
+
+        $normalizedTags[$keyPrefix . $key] = $value;
+    }
+
+    return $normalizedTags;
+}
+
+function setSpanKindAndComponent(SpanData $span, string $component, $operation = null)
+{
+    // dd-trace-php 2 sends span.kind and component written to $attributes as plain attributes,
+    // not as the span kind and component fields
+    if (\property_exists($span, 'spanKind')) {
+        $span->spanKind = $operation === 'receive'
+            ? SpanKind::CONSUMER
+            : ($operation === 'send' ? SpanKind::PRODUCER : SpanKind::CLIENT);
+        $span->component = $component;
+
+        return;
+    }
+
+    $span->meta[Tag::SPAN_KIND] = $operation === 'receive'
+        ? Tag::SPAN_KIND_VALUE_CONSUMER
+        : ($operation === 'send' ? Tag::SPAN_KIND_VALUE_PRODUCER : Tag::SPAN_KIND_VALUE_CLIENT);
+    $span->meta[Tag::COMPONENT] = $component;
 }
 
 /* ---- Tracing Functions ---- */
@@ -179,7 +254,7 @@ install_hook(
         /** @var \Symfony\Component\Messenger\Envelope $envelope */
         $envelope = $hook->args[0];
 
-        if (\ddtrace_config_distributed_tracing_enabled()) {
+        if (\dd_trace_env_config('DD_DISTRIBUTED_TRACING')) {
             $ddTraceStamp = $envelope->last(DDTraceStamp::class);
 
             // Add distributed tracing stamp only if not already on the envelope
@@ -220,7 +295,8 @@ trace_method(
                         $transportName,
                         $envelope,
                         null,
-                        true
+                        true,
+                        'receive'
                     );
 
                     consume_distributed_tracing_headers($ddTraceStamp->getHeaders());
@@ -259,7 +335,8 @@ trace_method(
                     $transportName,
                     $envelope,
                     $exception,
-                    true
+                    true,
+                    'receive'
                 );
 
                 close_span();
@@ -277,7 +354,8 @@ trace_method(
                 $transportName,
                 $envelope,
                 $exception,
-                true
+                true,
+                'receive'
             );
         },
         'recurse' => true,
